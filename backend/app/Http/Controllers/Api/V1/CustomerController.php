@@ -10,27 +10,72 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class CustomerController extends Controller
 {
-    // List customers
-    public function index()
-    {
-        try {
-            $user = Auth::user();
+        // List customers
+  public function index(Request $request)
+{
+    try {
+        $user = Auth::user();
+        $query = Customer::query();
 
-            $customers = $user->role === 'admin'
-                ? Customer::all()
-                : Customer::where('created_by', $user->id)->get();
+        // Admin sees all, normal user sees only their own
+        if ($user->role !== 'admin') {
+            $query->where('created_by', $user->id);
+        }
 
+        // Search by name or email
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by company
+        if ($request->filled('company')) {
+            $query->where('company_name', $request->company);
+        }
+
+        // **Sorting to prevent SQL injection**
+        $allowedSorts = ['name', 'email', 'company_name', 'created_at'];
+        $allowedOrders = ['asc', 'desc'];
+
+        $sortBy = in_array($request->get('sort_by'), $allowedSorts) 
+                  ? $request->get('sort_by') 
+                  : 'created_at';
+
+        $sortOrder = in_array($request->get('sort_order'), $allowedOrders)
+                     ? $request->get('sort_order') 
+                     : 'desc';
+
+        $query->orderBy($sortBy, $sortOrder);
+
+        // Pagination
+        $perPage = $request->get('per_page', 10);
+        $customers = $query->paginate($perPage);
+
+        // Check if paginated results are empty
+        if ($customers->isEmpty()) {
             return response()->json([
                 'success' => true,
-                'data' => $customers
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
+                'message' => 'No customers found',
+                'data' => []
+            ], 404);
         }
+
+        return response()->json([
+            'success' => true,
+            'data' => $customers
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     // Create a customer
     public function store(Request $request)
