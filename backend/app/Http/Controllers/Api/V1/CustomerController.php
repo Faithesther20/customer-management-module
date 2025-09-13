@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\CustomersImport;
 use App\Exports\CustomersExport;
+use Illuminate\Support\Facades\Log;
+
 
 
 class CustomerController extends Controller
@@ -83,36 +85,77 @@ class CustomerController extends Controller
 
 
     // Create a customer
+    // public function store(Request $request)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'name' => 'required|string',
+    //             'email' => 'required|email|unique:customers',
+    //             'phone' => 'required|unique:customers',
+    //             'company_name' => 'required|string',
+    //         ]);
+
+    //         $customer = Customer::create([
+    //             'name' => $request->name,
+    //             'email' => $request->email,
+    //             'phone' => $request->phone,
+    //             'company_name' => $request->company_name,
+    //             'created_by' => Auth::id(),
+    //         ]);
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Customer created successfully',
+    //             'data' => $customer
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
     public function store(Request $request)
-    {
-        try {
-            $request->validate([
-                'name' => 'required|string',
-                'email' => 'required|email|unique:customers',
-                'phone' => 'required|unique:customers',
-                'company_name' => 'required|string',
-            ]);
+{
+    try {
 
-            $customer = Customer::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'company_name' => $request->company_name,
-                'created_by' => Auth::id(),
-            ]);
+        \Log::info('Authenticated user', ['id' => Auth::id(), 'role' => Auth::user()->role]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Customer created successfully',
-                'data' => $customer
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
+        $user = Auth::user();
+
+        $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|email|unique:customers,email',
+            'phone' => 'required|unique:customers,phone',
+            'company_name' => 'required|string',
+        ]);
+
+        $customer = Customer::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'company_name' => $request->company_name,
+            'created_by' => $user->id, // <- ensure this is not null
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Customer created successfully',
+            'data' => $customer
+        ]);
+    } catch (\Exception $e) {
+        // better error logging
+        \Log::error('Customer store failed: '.$e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to create customer',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     // Show single customer
     public function show($id)
