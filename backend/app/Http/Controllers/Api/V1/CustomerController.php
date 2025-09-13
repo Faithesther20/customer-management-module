@@ -188,56 +188,88 @@ class CustomerController extends Controller
 
     // Import customers from  Excel or CSV
         public function import(Request $request)
-        {
-            try {
-                $request->validate([
-                    'file' => 'required|file|mimes:csv,xlsx'
-                ]);
+    {
+        try {
+            $request->validate([
+                'file' => 'required|file|mimes:csv,xlsx'
+            ]);
 
-                Excel::import(new CustomersImport, $request->file('file'));
+            Excel::import(new CustomersImport, $request->file('file'));
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Customers imported successfully'
-                ]);
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage()
-                ], 500);
-            }
+            return response()->json([
+                'success' => true,
+                'message' => 'Customers imported successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Export customers to Excel or CSV
+    public function export(Request $request)
+    {
+        $user = $request->user();
+        $format = $request->query('format', 'csv'); // default CSV
+
+        // Role-based export
+        if ($user->role === 'admin') {
+            $customers = Customer::all();
+        } else {
+            $customers = Customer::where('created_by', $user->id)->get();
         }
 
-        // Export customers to Excel or CSV
-        public function export(Request $request)
-        {
-           $user = $request->user();
-            $format = $request->query('format', 'csv'); // default CSV
-
-            // Role-based export
-            if ($user->role === 'admin') {
-                $customers = Customer::all();
-            } else {
-                $customers = Customer::where('created_by', $user->id)->get();
-            }
-
-            if ($customers->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No customers found for export'
-                ], 404);
-            }
-
-            $export = new CustomersExport($customers);
-
-            // Decide format
-            if ($format === 'xlsx') {
-                return Excel::download($export, 'customers_export.xlsx', \Maatwebsite\Excel\Excel::XLSX);
-            } else {
-                return Excel::download($export, 'customers_export.csv', \Maatwebsite\Excel\Excel::CSV);
-            }
+        if ($customers->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No customers found for export'
+            ], 404);
         }
-   
+
+        $export = new CustomersExport($customers);
+
+        // Decide format
+        if ($format === 'xlsx') {
+            return Excel::download($export, 'customers_export.xlsx', \Maatwebsite\Excel\Excel::XLSX);
+        } else {
+            return Excel::download($export, 'customers_export.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+    }
+
+
+    //** CODES for Dashboar sumamay */ 
+    public function summary()
+    {
+        try {
+            $totalCustomers = Customer::count();
+
+            $customersToday = Customer::whereDate('created_at', now()->toDateString())->count();
+
+            $topCompanies = Customer::select('company_name')
+                ->selectRaw('COUNT(*) as total')
+                ->groupBy('company_name')
+                ->orderByDesc('total')
+                ->limit(5)
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_customers' => $totalCustomers,
+                    'customers_today' => $customersToday,
+                    'top_companies'   => $topCompanies
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch summary',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 
   
 

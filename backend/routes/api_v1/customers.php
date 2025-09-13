@@ -18,4 +18,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/import', [CustomerController::class, 'import']);
         Route::get('/export', [CustomerController::class, 'export']);
     });
+
+    // Customer Dashboard
+    Route::prefix('customers/dashboard')->group(function () {
+         Route::get('/summary', [CustomerController::class, 'summary']);
+    });
+
 });
