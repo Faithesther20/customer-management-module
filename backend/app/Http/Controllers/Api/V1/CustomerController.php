@@ -8,73 +8,78 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\CustomersImport;
+use App\Exports\CustomersExport;
+
+
 class CustomerController extends Controller
 {
         // List customers
   public function index(Request $request)
-{
-    try {
-        $user = Auth::user();
-        $query = Customer::query();
+    {
+        try {
+            $user = Auth::user();
+            $query = Customer::query();
 
-        // Admin sees all, normal user sees only their own
-        if ($user->role !== 'admin') {
-            $query->where('created_by', $user->id);
-        }
+            // Admin sees all, normal user sees only their own
+            if ($user->role !== 'admin') {
+                $query->where('created_by', $user->id);
+            }
 
-        // Search by name or email
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
+            // Search by name or email
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
 
-        // Filter by company
-        if ($request->filled('company')) {
-            $query->where('company_name', $request->company);
-        }
+            // Filter by company
+            if ($request->filled('company')) {
+                $query->where('company_name', $request->company);
+            }
 
-        // **Sorting to prevent SQL injection**
-        $allowedSorts = ['name', 'email', 'company_name', 'created_at'];
-        $allowedOrders = ['asc', 'desc'];
+            // **Sorting to prevent SQL injection**
+            $allowedSorts = ['name', 'email', 'company_name', 'created_at'];
+            $allowedOrders = ['asc', 'desc'];
 
-        $sortBy = in_array($request->get('sort_by'), $allowedSorts) 
-                  ? $request->get('sort_by') 
-                  : 'created_at';
+            $sortBy = in_array($request->get('sort_by'), $allowedSorts) 
+                    ? $request->get('sort_by') 
+                    : 'created_at';
 
-        $sortOrder = in_array($request->get('sort_order'), $allowedOrders)
-                     ? $request->get('sort_order') 
-                     : 'desc';
+            $sortOrder = in_array($request->get('sort_order'), $allowedOrders)
+                        ? $request->get('sort_order') 
+                        : 'desc';
 
-        $query->orderBy($sortBy, $sortOrder);
+            $query->orderBy($sortBy, $sortOrder);
 
-        // Pagination
-        $perPage = $request->get('per_page', 10);
-        $customers = $query->paginate($perPage);
+            // Pagination
+            $perPage = $request->get('per_page', 10);
+            $customers = $query->paginate($perPage);
 
-        // Check if paginated results are empty
-        if ($customers->isEmpty()) {
+            // Check if paginated results are empty
+            if ($customers->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No customers found',
+                    'data' => []
+                ], 404);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'No customers found',
-                'data' => []
-            ], 404);
+                'data' => $customers
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'data' => $customers
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => $e->getMessage()
-        ], 500);
     }
-}
 
 
     // Create a customer
@@ -176,4 +181,66 @@ class CustomerController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+  
+
+    //******** CODES  ON IMPORTS */
+
+    // Import customers from  Excel or CSV
+        public function import(Request $request)
+        {
+            try {
+                $request->validate([
+                    'file' => 'required|file|mimes:csv,xlsx'
+                ]);
+
+                Excel::import(new CustomersImport, $request->file('file'));
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Customers imported successfully'
+                ]);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage()
+                ], 500);
+            }
+        }
+
+        // Export customers to Excel or CSV
+        public function export(Request $request)
+        {
+           $user = $request->user();
+            $format = $request->query('format', 'csv'); // default CSV
+
+            // Role-based export
+            if ($user->role === 'admin') {
+                $customers = Customer::all();
+            } else {
+                $customers = Customer::where('created_by', $user->id)->get();
+            }
+
+            if ($customers->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No customers found for export'
+                ], 404);
+            }
+
+            $export = new CustomersExport($customers);
+
+            // Decide format
+            if ($format === 'xlsx') {
+                return Excel::download($export, 'customers_export.xlsx', \Maatwebsite\Excel\Excel::XLSX);
+            } else {
+                return Excel::download($export, 'customers_export.csv', \Maatwebsite\Excel\Excel::CSV);
+            }
+        }
+   
+
+  
+
+
+
 }
