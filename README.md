@@ -100,7 +100,7 @@ The frontend uses **React** and **Vite**, providing a fast development experienc
 
 ## Developer
 
-Esther J. Iyege – Software Developer & Entrepreneur
+Esther J. Iyege – Software Developer
 
 Experienced in React, Laravel, Mobile App Development, and Digital Skills Training.
 
