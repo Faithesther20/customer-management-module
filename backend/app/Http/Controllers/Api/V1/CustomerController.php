@@ -286,35 +286,45 @@ class CustomerController extends Controller
     }
 
     // Dashboard summary
-    public function summary()
-    {
-        try {
-            $totalCustomers = Customer::count();
-            $customersToday = Customer::whereDate('created_at', now()->toDateString())->count();
-            $topCompanies = Customer::select('company_name')
-                                ->selectRaw('COUNT(*) as total')
-                                ->groupBy('company_name')
-                                ->orderByDesc('total')
-                                ->limit(5)
-                                ->get();
+ public function summary()
+{
+    try {
+        $user = Auth::user();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Summary retrieved successfully',
-                'data' => [
-                    'total_customers' => $totalCustomers,
-                    'customers_today' => $customersToday,
-                    'top_companies'   => $topCompanies
-                ]
-            ]);
+        // Base query depending on role
+        $query = $user->role === 'admin' 
+                 ? Customer::query() 
+                 : Customer::where('created_by', $user->id);
 
-        } catch (\Exception $e) {
-            Log::error('Summary fetch failed: '.$e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch summary',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        $totalCustomers = $query->count();
+        $customersToday = $query->whereDate('created_at', now()->toDateString())->count();
+
+        // Top companies
+        $topCompanies = $query->select('company_name')
+                              ->selectRaw('COUNT(*) as total')
+                              ->groupBy('company_name')
+                              ->orderByDesc('total')
+                              ->limit(5)
+                              ->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Summary retrieved successfully',
+            'data' => [
+                'total_customers' => $totalCustomers,
+                'customers_today' => $customersToday,
+                'top_companies'   => $topCompanies
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Summary fetch failed: '.$e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to fetch summary',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
 }
