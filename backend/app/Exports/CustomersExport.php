@@ -4,8 +4,10 @@ namespace App\Exports;
 
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 
-class CustomersExport implements FromCollection, WithHeadings
+class CustomersExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize
 {
     protected $customers;
 
@@ -14,21 +16,20 @@ class CustomersExport implements FromCollection, WithHeadings
         $this->customers = $customers;
     }
 
-    public function collection()
+    // Map each customer row for export
+    public function map($customer): array
     {
-        // Select only needed columns
-        return $this->customers->map(function ($customer) {
-            return [
-                'name'       => $customer->name,
-                'email'      => $customer->email,
-                'phone'      => $customer->phone,
-                'company'    => $customer->company_name,
-                'created_by' => $customer->user ? $customer->user->name : 'N/A',
-                'created_at' => $customer->created_at->toDateTimeString(),
-            ];
-        });
+        return [
+            $customer->name ?? '',
+            $customer->email ?? '',
+            $customer->phone ?? '',
+            $customer->company_name ?? '',
+            $customer->user?->name ?? 'N/A',
+            $customer->created_at?->format('Y-m-d H:i:s') ?? '',
+        ];
     }
 
+    // Add headings for the exported file
     public function headings(): array
     {
         return [
@@ -39,5 +40,11 @@ class CustomersExport implements FromCollection, WithHeadings
             'Created By',
             'Created At',
         ];
+    }
+
+    // Provide the collection to export
+    public function collection()
+    {
+        return $this->customers;
     }
 }

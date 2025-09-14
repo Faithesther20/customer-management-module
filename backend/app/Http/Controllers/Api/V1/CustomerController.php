@@ -230,26 +230,55 @@ class CustomerController extends Controller
     //******** CODES  ON IMPORTS */
 
     // Import customers from  Excel or CSV
-        public function import(Request $request)
-    {
-        try {
-            $request->validate([
-                'file' => 'required|file|mimes:csv,xlsx'
-            ]);
+    //     public function import(Request $request)
+    // {
+    //     try {
+    //         $request->validate([
+    //             'file' => 'required|file|mimes:csv,xlsx'
+    //         ]);
 
-            Excel::import(new CustomersImport, $request->file('file'));
+    //         Excel::import(new CustomersImport, $request->file('file'));
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Customers imported successfully'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Customers imported successfully'
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+   public function import(Request $request)
+{
+    try {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,xlsx'
+        ]);
+
+        $userId = Auth::id(); // get the current logged-in user
+        $file = $request->file('file');
+
+        Excel::import(new CustomersImport($userId), $request->file('file'));
+
+            // Delete the uploaded temp file to avoid conflicts
+        if (file_exists($file->getPathname())) {
+            unlink($file->getPathname());
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Customers imported successfully'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage()
+        ], 500);
     }
+}   
 
     // Export customers to Excel or CSV
     public function export(Request $request)
