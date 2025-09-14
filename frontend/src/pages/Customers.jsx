@@ -8,25 +8,34 @@ import FileActionModal from '../components/FileActionModal';
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({});
+  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1 });
   const [search, setSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState(null);
   const [fileModalOpen, setFileModalOpen] = useState(false);
   const [modalType, setModalType] = useState('');
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  };
 
   const fetchCustomers = async (page = 1) => {
     setLoading(true);
     try {
       const res = await api.get('/customers', { params: { page, search, company: filterCompany } });
-      setCustomers(res.data.data.data);
+      const data = res.data?.data?.data || [];
+      setCustomers(data);
       setPagination({
-        current_page: res.data.data.current_page,
-        last_page: res.data.data.last_page,
+        current_page: res.data?.data?.current_page || 1,
+        last_page: res.data?.data?.last_page || 1,
       });
     } catch (err) {
       console.error(err);
+      showMessage('error', 'An error occurred while fetching customers.');
+      setCustomers([]); // fallback to empty array
     } finally {
       setLoading(false);
     }
@@ -37,20 +46,26 @@ export default function Customers() {
   }, [search, filterCompany]);
 
   const handleDelete = async (id) => {
-  if (!window.confirm('Are you sure you want to delete this customer?')) return;
-  try {
-    await api.delete(`/customers/${id}`);
-    setCustomers(prev => prev.filter(customer => customer.id !== id));
-    
-    // Optional: adjust pagination if needed
-    if (customers.length === 1 && pagination.current_page > 1) {
-      fetchCustomers(pagination.current_page - 1);
-    }
-  } catch (err) {
-    console.error(err);
-  }
-};
+    if (!window.confirm('Are you sure you want to delete this customer?')) return;
+    try {
+      const res = await api.delete(`/customers/${id}`);
+      if (res.data.success) {
+        const updated = customers.filter(c => c.id !== id);
+        setCustomers(updated);
+        showMessage('success', res.data.message || 'Customer deleted successfully.');
 
+        // Fetch previous page if last item on current page is deleted
+        if (updated.length === 0 && pagination.current_page > 1) {
+          fetchCustomers(pagination.current_page - 1);
+        }
+      } else {
+        showMessage('error', res.data.message || 'Failed to delete customer.');
+      }
+    } catch (err) {
+      console.error(err);
+      showMessage('error', 'An error occurred while deleting customer.');
+    }
+  };
 
   const openAddModal = () => {
     setCurrentCustomer(null);
@@ -65,6 +80,13 @@ export default function Customers() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-slate-800 mb-6">Customers</h1>
+
+      {/* Feedback Message */}
+      {message.text && (
+        <div className={`mb-4 px-4 py-2 rounded ${message.type === 'success' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+          {message.text}
+        </div>
+      )}
 
       {/* Search & Filter */}
       <div className="flex flex-col md:flex-row md:items-center md:space-x-4 mb-6">
@@ -82,7 +104,6 @@ export default function Customers() {
           onChange={(e) => setFilterCompany(e.target.value)}
           className="border border-gray-300 rounded-lg px-4 py-2 w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
         />
-
         <div className="flex space-x-2 mt-3 md:mt-0">
           <Button onClick={openAddModal}>Add Customer</Button>
           <Button onClick={() => { setModalType('import'); setFileModalOpen(true); }}>Import</Button>
@@ -134,13 +155,13 @@ export default function Customers() {
           {/* Pagination */}
           <div className="flex justify-end mt-6 space-x-3">
             <button
-              disabled={pagination.current_page === 1}
+              disabled={pagination.current_page <= 1}
               onClick={() => fetchCustomers(pagination.current_page - 1)}
               className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-300 transition"
             >Prev</button>
             <span className="px-4 py-2 text-gray-700 font-medium">{pagination.current_page} / {pagination.last_page}</span>
             <button
-              disabled={pagination.current_page === pagination.last_page}
+              disabled={pagination.current_page >= pagination.last_page}
               onClick={() => fetchCustomers(pagination.current_page + 1)}
               className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-300 transition"
             >Next</button>
@@ -151,12 +172,15 @@ export default function Customers() {
       {/* Add/Edit Modal */}
       {modalOpen && (
         <Modal
-          key={currentCustomer?.id || 'new'} // force remount if switching customers
+          key={currentCustomer?.id || 'new'}
           title={currentCustomer ? 'Edit Customer' : 'Add Customer'}
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
           customer={currentCustomer}
-          onCompleted={() => fetchCustomers(pagination.current_page)}
+          onCompleted={(msg) => {
+            showMessage('success', msg);
+            fetchCustomers(pagination.current_page);
+          }}
         />
       )}
 
@@ -166,7 +190,10 @@ export default function Customers() {
           type={modalType}
           isOpen={fileModalOpen}
           onClose={() => setFileModalOpen(false)}
-          onCompleted={() => fetchCustomers(pagination.current_page)}
+          onCompleted={(msg) => {
+            showMessage('success', msg);
+            fetchCustomers(pagination.current_page);
+          }}
         />
       )}
     </div>

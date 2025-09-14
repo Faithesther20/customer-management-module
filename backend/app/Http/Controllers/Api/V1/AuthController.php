@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Api\V1;
+
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -9,109 +10,68 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    // Register
+    // Register a new user
     public function register(Request $request)
     {
-        try {
-            $request->validate([
-                'name'     => 'required|string',
-                'email'    => 'required|string|email|unique:users',
-                'password' => 'required|string|min:6|confirmed',
-                'role'     => 'in:admin,user' // optional role field
-            ]);
+        $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|string|email|unique:users,email',
+            'password' => 'required|string|min:6|confirmed',
+            'role'     => 'nullable|in:user', // prevent creating admin directly
+        ]);
 
-            $user = User::create([
-                'name'     => $request->name,
-                'email'    => $request->email,
-                'password' => Hash::make($request->password),
-                'role'     => $request->role ?? 'user',
-            ]);
+        $user = User::create([
+            'name'     => $request->name,
+            'email'    => $request->email,
+            'password' => Hash::make($request->password),
+            'role'     => $request->role ?? 'user',
+        ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'User registered successfully',
-                'data'    => [
-                    'token' => $user->createToken('auth_token')->plainTextToken,
-                    'user'  => $user,
-                ],
-            ], 200);
-
-        } catch (ValidationException $e) {
-               
-            return response()->json([
-                'success' => false,
-                'errors'  => $e->errors(),
-            ], 422);
-
-
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Registration failed',
-                'error'   => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'User registered successfully',
+            'data'    => [
+                'token' => $user->createToken('api_token')->plainTextToken,
+                'user'  => $user,
+            ],
+        ], 201); // 201 Created
     }
 
-    // Login
+    // Login existing user
     public function login(Request $request)
     {
-        try {
-            $request->validate([
-                'email'    => 'required|string|email',
-                'password' => 'required|string',
+        $request->validate([
+            'email'    => 'required|string|email',
+            'password' => 'required|string',
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            throw ValidationException::withMessages([
+                'email' => ['Invalid credentials'],
             ]);
-
-            $user = User::where('email', $request->email)->first();
-
-            if (!$user || !Hash::check($request->password, $user->password)) {
-                throw ValidationException::withMessages([
-                    'email' => ['Invalid credentials'],
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Login successful',
-                'data'    => [
-                    'token' => $user->createToken('auth_token')->plainTextToken,
-                    'user'  => $user,
-                ],
-            ], 200);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'errors'  => $e->errors(),
-            ], 422);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Login failed',
-                'error'   => $e->getMessage(),
-            ], 500);
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'data'    => [
+                'token' => $user->createToken('api_token')->plainTextToken,
+                'user'  => $user,
+            ],
+        ], 200);
     }
 
-    // Logout
+    // Logout user (current device)
     public function logout(Request $request)
     {
-        try {
-            $request->user()->tokens()->delete();
+        // Delete current access token only for per-device logout
+        $request->user()->currentAccessToken()->delete();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Logged out successfully'
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Logout failed',
-                'error'   => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Logged out successfully',
+        ], 200);
     }
 }

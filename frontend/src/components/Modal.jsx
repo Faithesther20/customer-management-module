@@ -4,7 +4,6 @@ import Button from './Button';
 import Loader from './Loader';
 
 export default function Modal({ isOpen, onClose, title, customer = null, onCompleted }) {
-  // Form state inside modal
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -13,8 +12,8 @@ export default function Modal({ isOpen, onClose, title, customer = null, onCompl
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [generalError, setGeneralError] = useState('');
 
-  // Only populate form **once** when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
@@ -33,8 +32,10 @@ export default function Modal({ isOpen, onClose, title, customer = null, onCompl
         company_name: '',
       });
     }
+
     setErrors({});
-  }, [isOpen]); // <-- DO NOT include `customer` here
+    setGeneralError('');
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -47,20 +48,34 @@ export default function Modal({ isOpen, onClose, title, customer = null, onCompl
     e.preventDefault();
     setLoading(true);
     setErrors({});
+    setGeneralError('');
+
     try {
+      let res;
       if (customer) {
-        await api.put(`/customers/${customer.id}`, formData);
+        res = await api.put(`/customers/${customer.id}`, formData);
       } else {
-        await api.post('/customers', formData);
+        res = await api.post('/customers', formData);
       }
-      onCompleted();
-      onClose();
+
+      if (res.data.success) {
+        onCompleted(res.data.message || (customer ? 'Customer updated successfully.' : 'Customer added successfully.'));
+        onClose();
+      } else {
+        setGeneralError(res.data.message || 'Something went wrong.');
+      }
+
     } catch (err) {
-      if (err.response && err.response.status === 422) {
-        setErrors(err.response.data.errors || {});
+      if (err.response) {
+        if (err.response.status === 422) {
+          setErrors(err.response.data.errors || {});
+        } else {
+          setGeneralError(err.response.data.message || 'An error occurred.');
+        }
       } else {
-        console.error('Request failed:', err);
+        setGeneralError('Server is not responding.');
       }
+      console.error('Request failed:', err);
     } finally {
       setLoading(false);
     }
@@ -71,10 +86,18 @@ export default function Modal({ isOpen, onClose, title, customer = null, onCompl
       <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
         <h2 className="text-xl font-bold mb-4 text-slate-800">{title}</h2>
 
+        {generalError && (
+          <div className="mb-4 px-4 py-2 rounded bg-red-100 text-red-700 font-medium">
+            {generalError}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {['name', 'email', 'phone', 'company_name'].map((field) => (
             <div key={field}>
-              <label className="block text-gray-700 font-medium mb-1 capitalize">{field.replace('_', ' ')}</label>
+              <label className="block text-gray-700 font-medium mb-1 capitalize">
+                {field.replace('_', ' ')}
+              </label>
               <input
                 type={field === 'email' ? 'email' : 'text'}
                 name={field}
@@ -84,7 +107,7 @@ export default function Modal({ isOpen, onClose, title, customer = null, onCompl
                 className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                 required
               />
-              {errors[field] && <p className="text-red-500 text-sm">{errors[field][0]}</p>}
+              {errors[field] && <p className="text-red-500 text-sm mt-1">{errors[field][0]}</p>}
             </div>
           ))}
 
